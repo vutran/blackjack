@@ -12,11 +12,12 @@ import simplegui, random
 
 GAME_WINDOW_WIDTH = 600
 GAME_WINDOW_HEIGHT = 600
+GAME_WINDOW_SIZE = (GAME_WINDOW_WIDTH, GAME_WINDOW_HEIGHT)
 CARD_IMAGE_SRC = "https://www.dropbox.com/s/cd6ik0pmrnk97nm/cards.png?dl=1" # source URL for the card image
 CARD_BACK_IMAGE_SRC = "https://www.dropbox.com/s/t8ib5k3z1uv6w7v/cards-back.png?dl=1"
 CARD_IMAGE_SIZE = (72, 96) # the dimensions of the card
 HAND_GUTTER_SIZE = 5 # width between each card in the hand
-BUTTONS_WIDTH = 150 # width of the buttons
+BUTTONS_SIZE = (163, 30) # size of the buttons
 
 class Dispatcher:
     def __init__(self):
@@ -41,6 +42,40 @@ class Dispatcher:
                 # call the given handler
                 e['handler'](args)
 
+class Frame:
+    def __init__(self, frame, size):
+        self.frame = frame
+        self.size = size
+    def get_width(self):
+        """
+        Returns the width of the frame
+        """
+        return self.size[0]
+    def get_height(self):
+        """
+        Returns the height of the frame
+        """
+        return self.size[1]
+    def get(self):
+        """
+        Returns the frame object
+        """
+        return self.frame
+    def start(self):
+        """
+        Starts the frame
+        """
+        self.get().start()
+    def add_button(self, label, handler):
+        """
+        Adds a new button to the frame
+        """
+        self.get().add_button(label, handler)
+    def set_draw_handler(self, handler):
+        self.get().set_draw_handler(handler)
+    def set_mouseclick_handler(self, handler):
+        self.get().set_mouseclick_handler(handler)
+
 class Game:
     def __init__(self, size):
         """
@@ -48,8 +83,8 @@ class Game:
         """
         # sets the window's size
         self.set_window_size(size)
-        # creates the game frame (window)
-        self.create_frame()
+        # creates the Frame
+        self.frame = self.create_frame()
     def set_window_size(self, size):
         """
         Sets the game window's size
@@ -68,20 +103,27 @@ class Game:
         return self.get_window_size()[1]
     def create_frame(self):
         """
-        Creates a new game frame (window) and set's the draw handler
+        Creates and returns a new Frame instance and set's the draw handler
         """
-        self.frame = simplegui.create_frame("Game", self.get_window_width(), self.get_window_height())
+        sg_frame = simplegui.create_frame("Game", self.get_window_width(), self.get_window_height())
+        # create a new Frame instance
+        frame = Frame(sg_frame, self.get_window_size())
         # sets the draw handler
-        self.frame.set_draw_handler(self.draw)
+        frame.set_draw_handler(self.draw)
         # sets the mouse click handler
-        self.frame.set_mouseclick_handler(self.onclick)
+        frame.set_mouseclick_handler(self.onclick)
+        # return the Frame instance
+        return frame
     def get_frame(self):
+        """
+        Retrieve the Frame instance
+        """
         return self.frame
     def start(self):
         """
         Starts the game (opens the game frame)
         """
-        self.frame.start()
+        self.get_frame().get().start()
     def draw(self, canvas):
         """
         Draw handler
@@ -300,13 +342,12 @@ class Card:
         canvas.draw_image(image, center_source, width_height_source, center_dest, width_height_dest)
 
 class Hand:
-    def __init__(self, x, y, width, height, gutter_size):
+    def __init__(self, x, y, size, gutter_size):
         self.cards = []
         self.buttons = []
         self.x = x
         self.y = y
-        self.width = width
-        self.height = height
+        self.size = size
         self.line_width = 1
         self.line_color = 'gray'
         self.fill_color = 'gray'
@@ -318,7 +359,7 @@ class Hand:
     def get_position(self):
         return (self.x, self.y)
     def get_size(self):
-        return (self.width, self.height)
+        return self.size
     def get_gutter_size(self):
         return self.gutter_size
     def set_deck(self, deck):
@@ -436,9 +477,9 @@ class Hand:
         """
         position = [
             (self.x, self.y), # top left
-            (self.x + self.width, self.y), # top right
-            (self.x + self.width, self.y + self.height), # bottom right
-            (self.x, self.y + self.height) # bottom left
+            (self.x + self.size[0], self.y), # top right
+            (self.x + self.size[0], self.y + self.size[1]), # bottom right
+            (self.x, self.y + self.size[1]) # bottom left
         ]
         canvas.draw_polygon(position, self.line_width, self.line_color, self.fill_color)
     def set_stand_handler(self, stand_handler):
@@ -449,17 +490,6 @@ class Hand:
         self.bust_handler = bust_handler
 
 class PlayerHand(Hand):
-    def __init__(self, x, y, width, height, gutter_size, buttons_width):
-        # calls the parent initializer
-        Hand.__init__(self, x, y, width, height, gutter_size)
-        # set the buttons' width
-        self.buttons_width = buttons_width
-        # draws the action buttons
-        self.btn_deal = self.add_button('Deal', self.get_buttons_width(), 30, self.deal)
-        self.btn_hit = self.add_button('Hit', self.get_buttons_width(), 30, self.hit)
-        self.btn_stand = self.add_button('Stand', self.get_buttons_width(), 30, self.stand)
-        # register the draw handler
-        dispatcher.add('draw', self.draw_buttons)
     def deal(self):
         """
         Deals a new hand
@@ -480,9 +510,6 @@ class PlayerHand(Hand):
         # add the new card to the hand
         self.add_card(card1)
         self.add_card(card2)
-        # enable buttons
-        self.btn_hit.disable(False)
-        self.btn_stand.disable(False)
         # enable the playing flag
         self.is_playing = True
         # calls the deal handler
@@ -490,43 +517,10 @@ class PlayerHand(Hand):
             self.deal_handler()
         # checks the current hand
         self.check_hand()
-    def stand(self):
-        # calls parent method
-        Hand.stand(self)
-        # enable buttons
-        self.btn_deal.disable(False)
-        # disable buttons
-        self.btn_hit.disable(True)
-        self.btn_stand.disable(True)
     def set_deal_handler(self, deal_handler):
         self.deal_handler = deal_handler
     def set_deal_new_handler(self, deal_new_handler):
         self.deal_new_handler = deal_new_handler
-    def get_buttons_width(self):
-        return self.buttons_width
-    def add_button(self, text, width, height, handler):
-        """
-        Creates and return a new button and bind the onclick event with the given handler
-        """
-        # create a new button
-        button = Button(text, width, height, self.x, self.y + self.height + self.gutter_size, handler)
-        self.buttons.append(button)
-        return button
-    def get_buttons(self):
-        return self.buttons
-    def draw_buttons(self, canvas):
-        """
-        Draws the buttons
-        """
-        buttons = self.get_buttons()
-        # iterate through each card in the hand
-        for i in range(len(buttons)):
-            # retrieve the button
-            button = buttons[i]
-            # set the button's offset position based on the given index
-            button.set_offset((0, (button.get_height() + self.gutter_size) * i))
-            # draw the button
-            button.draw(canvas)
 
 class AIHand(Hand):
     def start(self):
@@ -558,15 +552,77 @@ class AIHand(Hand):
         self.add_card(card1)
         self.add_card(card2)
 
+class ActionPanel:
+    def __init__(self, x, y, buttons_size, gutter_size = 5):
+        """
+        Creates a new action panel with action buttons: DEAL, HIT, and STAND
+
+        <int> x
+        <int> y
+        <tuple> buttons_size
+        <int> gutter_size
+        """
+        # set the positions
+        self.x = x
+        self.y = y
+        # set the buttons' size
+        self.buttons_size = buttons_size
+        # set the gutter size
+        self.gutter_size = gutter_size
+        # create a dictionary of buttons
+        self.buttons = {}
+        # register the draw handler
+        dispatcher.add('draw', self.draw_buttons)
+    def get_buttons_size(self):
+        return self.buttons_size
+    def add_button(self, name, text, size, handler):
+        """
+        Creates and return a new button and bind the onclick event with the given handler
+
+        <string> name
+        <string> text
+        <tuple> size
+        <callable> handler
+        """
+        # create a new button
+        button = Button(text, size, self.x, self.y + self.gutter_size, handler)
+        # append to dictionary
+        self.buttons[name] = button
+        return button
+    def get_buttons(self):
+        return self.buttons
+    def get_button(self, key):
+        return self.buttons[key]
+    def draw_buttons(self, canvas):
+        """
+        Draws the buttons
+        """
+        buttons = self.get_buttons()
+        # set the counter
+        i = 0
+        # iterate through each button in the hand
+        for key, button in buttons.items():
+            # set the button's offset position based on the given index
+            button.set_offset(((button.get_width() + self.gutter_size) * i, 0))
+            # draw the button
+            button.draw(canvas)
+            # increment counter
+            i += 1
+
 class Button:
-    def __init__(self, text, width, height, x, y, click_handler):
+    def __init__(self, text, size, x, y, click_handler):
         """
         Creates a new button and draws it on the canvas
+
+        <string> text
+        <tuple> size
+        <int> c
+        <int> y
+        <callable> click_handler
         """
         # set the props
         self.text = text
-        self.width = width
-        self.height = height
+        self.size = size
         self.x = x
         self.y = y
         self.line_width = 1
@@ -579,10 +635,15 @@ class Button:
         # register the click handler
         dispatcher.add('click', self.handle_click)
     def get_width(self):
-        return self.width
+        return self.size[0]
     def get_height(self):
-        return self.height
+        return self.size[1]
     def set_offset(self, offset):
+        """
+        Sets an offset
+
+        <tuple> offset
+        """
         self.offset = offset
     def get_offset(self):
         return self.offset
@@ -592,9 +653,9 @@ class Button:
         # calculate the points
         points = [
             (self.x + offset[0], self.y + offset[1]), # top left
-            (self.x + self.width + offset[0], self.y + offset[1]), # top right
-            (self.x + self.width + offset[0], self.y + self.height + offset[1]), # bottom right
-            (self.x + offset[0], self.y + self.height + offset[1]) # bottom left
+            (self.x + self.get_width() + offset[0], self.y + offset[1]), # top right
+            (self.x + self.get_width() + offset[0], self.y + self.get_height() + offset[1]), # bottom right
+            (self.x + offset[0], self.y + self.get_height() + offset[1]) # bottom left
         ]
         return points
     def disable(self, flag):
@@ -620,20 +681,19 @@ class Button:
         # draw the background
         canvas.draw_polygon(self.get_points(), self.line_width, line_color, fill_color)
         # calculate the text width
-        text_width = game.get_frame().get_canvas_textwidth(self.text, self.font_size)
+        text_width = game.get_frame().get().get_canvas_textwidth(self.text, self.font_size)
         # calculate the text positions
         text_pos = (self.get_points()[3][0] + (self.get_width() - text_width) / 2, self.get_points()[3][1] - ((self.get_height() - self.font_size) / 2))
         # draw the text
         canvas.draw_text(self.text, text_pos, self.font_size, self.font_color)
 
 class Score:
-    def __init__(self, x, y, width, height):
+    def __init__(self, x, y, size):
         self.wins = 0
         self.losses = 0
         self.x = x
         self.y = y
-        self.width = width
-        self.height = height
+        self.size = size
         self.display = True
         # register draw handlers
         dispatcher.add('draw', self.draw)
@@ -644,7 +704,7 @@ class Score:
     def get_position(self):
         return (self.x, self.y)
     def get_size(self):
-        return (self.width, self.height)
+        return self.size
     def inc_wins(self):
         self.wins += 1
     def inc_losses(self):
@@ -666,51 +726,50 @@ class Score:
             # calculate the points of the score in the canvas
             points = [
                 (self.x, self.y), # top left
-                (self.x + self.width, self.y), # top right
-                (self.x + self.width, self.y + self.height), # bottom right
-                (self.x, self.y + self.height), # bottom left
+                (self.x + self.size[0], self.y), # top right
+                (self.x + self.size[0], self.y + self.size[1]), # bottom right
+                (self.x, self.y + self.size[1]), # bottom left
             ]
             # draws the boundary box
             canvas.draw_polygon(points, 1, 'black')
             # draws the text
             font_size = 12
-            canvas.draw_text(self.get_wins_text(), (self.x, self.y + ((self.height + font_size) / 2)), font_size, 'white')
-            canvas.draw_text(self.get_losses_text(), (self.x + 100, self.y + ((self.height + font_size) / 2)), font_size, 'white')
+            canvas.draw_text(self.get_wins_text(), (self.x, self.y + ((self.size[1] + font_size) / 2)), font_size, 'white')
+            canvas.draw_text(self.get_losses_text(), (self.x + 100, self.y + ((self.size[1] + font_size) / 2)), font_size, 'white')
 
 class Notification:
-    def __init__(self, frame, frame_size, text, font_size = 40):
+    def __init__(self, frame, text, font_size = 40):
         """
         Creates a new notification and display it on the canvas
         """
         self.frame = frame
-        self.frame_size = frame_size
         self.text = text
         self.font_size = font_size
     def draw(self, canvas):
-        text_width = self.frame.get_canvas_textwidth(self.text, self.font_size)
-        point = ((self.frame_size[0] - text_width) / 2, (self.frame_size[1] - self.font_size) / 2)
+        text_width = self.frame.get().get_canvas_textwidth(self.text, self.font_size)
+        point = ((self.frame.get_width() - text_width) / 2, (self.frame.get_height() - self.font_size) / 2)
         canvas.draw_text(self.text, point, self.font_size, 'yellow')
 
 class BlackjackGame(Game):
-    def __init__(self, size, hand_gutter_size, buttons_width):
+    def __init__(self, size, hand_gutter_size, buttons_size):
         # calls parent method
         Game.__init__(self, size)
         # creates an empty placeholder prop for notifications
         self.notification = None
         # sets the hand's gutter size
         self.set_hand_gutter_size(hand_gutter_size)
-        # set the buttons' width
-        self.set_buttons_width(buttons_width)
+        # set the buttons' size
+        self.set_buttons_size(buttons_size)
         # draw the title
         dispatcher.add('draw', self.draw_title)
     def set_hand_gutter_size(self, hand_gutter_size):
         self.hand_gutter_size = hand_gutter_size
     def get_hand_gutter_size(self):
         return self.hand_gutter_size
-    def set_buttons_width(self, buttons_width):
-        self.buttons_width = buttons_width
-    def get_buttons_width(self):
-        return self.buttons_width
+    def set_buttons_size(self, buttons_size):
+        self.buttons_size = buttons_size
+    def get_buttons_size(self):
+        return self.buttons_size
     def create_deck(self):
         """
         Creates and return a new deck of cards
@@ -732,9 +791,8 @@ class BlackjackGame(Game):
         # calculate the position of the hand on the canvas (aligned underneath the score)
         x = score_position[0]
         y = score_position[1] + score_size[1] + 5
-        width = 500
-        height = 106
-        hand = PlayerHand(x, y, width, height, self.get_hand_gutter_size(), self.get_buttons_width())
+        size = (500, 106)
+        hand = PlayerHand(x, y, size, self.get_hand_gutter_size())
         hand.set_deck(deck)
         return hand
     def create_ai_hand(self, deck, score):
@@ -751,25 +809,42 @@ class BlackjackGame(Game):
         # calculate the position of the hand on the canvas (aligned underneath the score)
         x = score_position[0]
         y = score_position[1] + score_size[1] + 5
-        width = 500
-        height = 106
-        hand = AIHand(x, y, width, height, self.get_hand_gutter_size())
+        size = (500, 106)
+        hand = AIHand(x, y, size, self.get_hand_gutter_size())
         hand.set_deck(deck)
         return hand
+    def create_player_actions(self, hand):
+        """
+        Creates and returns a new action panel for the player
+
+        <Hand> hand
+        """
+        # retrieve the hand's positions
+        hand_pos = hand.get_position()
+        # retrieve the hand's size
+        hand_size = hand.get_size()
+        # create the player actions
+        player_actions = ActionPanel(hand_pos[0], hand_pos[1] + hand_size[1], self.get_buttons_size())
+        # create buttons for the panel
+        player_actions.add_button('Deal', 'Deal', self.get_buttons_size(), hand.deal)
+        player_actions.add_button('Hit', 'Hit', self.get_buttons_size(), hand.hit)
+        player_actions.add_button('Stand', 'Stand', self.get_buttons_size(), hand.stand)
+        # return the instance
+        return player_actions
     def start(self):
         self.deck = self.create_deck()
         # create the score boards
-        self.player_score = Score(50, 50, 500, 30)
-        self.ai_score = Score(50, 400, 500, 30)
+        self.player_score = Score(50, 50, (500, 30))
+        self.ai_score = Score(50, 400, (500, 30))
         self.ai_score.hide()
         # create a new player and AI hand
         self.player_hand = self.create_player_hand(self.deck, self.player_score)
+        self.player_actions = self.create_player_actions(self.player_hand)
         self.ai_hand = self.create_ai_hand(self.deck, self.ai_score)
         # bind the player and AI hands to the score
         self.player_score.set_hand(self.player_hand)
-        #self.ai_score.set_hand(self.ai_hand)
         # register the handler's for the given hand
-        self.player_hand.set_stand_handler(self.ai_hand.start)
+        self.player_hand.set_stand_handler(self.handle_player_stand)
         self.player_hand.set_deal_handler(self.handle_player_deal)
         self.player_hand.set_deal_new_handler(self.handle_deal_new)
         self.player_hand.set_blackjack_handler(self.handle_player_blackjack)
@@ -781,62 +856,74 @@ class BlackjackGame(Game):
         # starts a new game
         self.new_game()
         # create the frame controls
-        self.frame.add_button('Deal', self.player_hand.deal)
-        self.frame.add_button('Hit', self.player_hand.hit)
-        self.frame.add_button('Stand', self.player_hand.stand)
+        self.get_frame().add_button('Deal', self.player_hand.deal)
+        self.get_frame().add_button('Hit', self.player_hand.hit)
+        self.get_frame().add_button('Stand', self.player_hand.stand)
         # display the notification
+        self.display_notification('Hit or Stand?')
         dispatcher.add('draw', self.draw_notification)
         # starts the frame
-        self.frame.start()
+        self.get_frame().start()
+    def handle_player_stand(self):
+        # enable buttons
+        self.player_actions.get_button('Deal').disable(False)
+        # disable buttons
+        self.player_actions.get_button('Hit').disable(True)
+        self.player_actions.get_button('Stand').disable(True)
+        # starts the AI hand
+        self.ai_hand.start()
     def handle_player_deal(self):
+        # enable buttons
+        self.player_actions.get_button('Hit').disable(False)
+        self.player_actions.get_button('Stand').disable(False)
         # clears the notification
         if self.notification:
             del self.notification
-            self.notification = None
+            self.display_notification('Hit or Stand?')
         # resets the AI's hand
         self.ai_hand.reset()
     def handle_player_blackjack(self):
-        self.handle_player_win('You won! You have 21!')
+        self.handle_player_win('You won! You have 21! New Deal?')
     def handle_player_bust(self):
-        self.handle_player_lost('You lost! You BUSTED!');
+        self.handle_player_lost('You lost! You BUSTED! New Deal?');
     def handle_compare_scores(self):
         """
         Compares the player and AI hand
         """
         if self.ai_hand.is_playing:
             if self.ai_hand.is_blackjack():
-                self.handle_player_lost('You lost! AI has 21!')
+                self.handle_player_lost('You lost! AI has 21! New Deal?')
             elif self.ai_hand.is_bust():
-                self.handle_player_win('You won! AI busted!')
+                self.handle_player_win('You won! AI busted! New Deal?')
             elif max(0, min(21, self.player_hand.get_value())) > max(0, min(21, self.ai_hand.get_value())):
-                self.handle_player_win()
+                self.handle_player_win('You won! New Deal?')
             else:
-                self.handle_player_lost()
+                self.handle_player_lost('You lost! New Deal?')
     def handle_deal_new(self):
         """
         Player chooses to deal a new hand.
         Loses the current hand and deals a new hand.
         """
         if self.player_hand.is_playing and not self.ai_hand.is_playing:
-            self.handle_player_lost('You lost! Dealing new hand.')
+            self.handle_player_lost('You lost! New Deal?')
             self.new_game()
-    def handle_player_win(self, message = 'You won!'):
+    def handle_player_win(self, message = 'You won! New Deal?'):
         self.player_score.inc_wins()
         self.ai_score.inc_losses()
         # disable buttons
-        self.player_hand.btn_hit.disable(True)
-        self.player_hand.btn_stand.disable(True)
+        self.player_actions.get_button('Hit').disable(True)
+        self.player_actions.get_button('Stand').disable(True)
         # reset playing flags
         self.player_hand.is_playing = False
         self.ai_hand.is_playing = False
         # display notification
         self.display_notification(message)
-    def handle_player_lost(self, message = 'You lost!'):
+    def handle_player_lost(self, message = 'You lost! New Deal?'):
         self.player_score.inc_losses()
         self.ai_score.inc_wins()
         # disable buttons
-        self.player_hand.btn_hit.disable(True)
-        self.player_hand.btn_stand.disable(True)
+        self.player_actions.get_button('Hit').disable(True)
+        self.player_actions.get_button('Stand').disable(True)
         # reset playing flags
         self.player_hand.is_playing = False
         self.ai_hand.is_playing = False
@@ -849,7 +936,7 @@ class BlackjackGame(Game):
         # deals a new hand
         self.player_hand.deal()
     def display_notification(self, text):
-        self.notification = Notification(self.get_frame(), self.get_window_size(), text)
+        self.notification = Notification(self.get_frame(), text)
     def draw_notification(self, canvas):
         # draw notification if it exists
         if self.notification:
@@ -857,15 +944,13 @@ class BlackjackGame(Game):
     def draw_title(self, canvas):
         text = "Blackjack"
         font_size = 30
-        text_width = self.get_frame().get_canvas_textwidth(text, font_size)
+        text_width = self.get_frame().get().get_canvas_textwidth(text, font_size)
         point = ((self.get_window_width() - text_width) / 2, font_size + 10)
         canvas.draw_text(text, point, font_size, 'white')
 
 
 
 # bootstrap
-
 dispatcher = Dispatcher()
-
-game = BlackjackGame((GAME_WINDOW_WIDTH, GAME_WINDOW_HEIGHT), HAND_GUTTER_SIZE, BUTTONS_WIDTH)
+game = BlackjackGame(GAME_WINDOW_SIZE, HAND_GUTTER_SIZE, BUTTONS_SIZE)
 game.start()
